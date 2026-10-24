@@ -3,7 +3,7 @@ import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import dotenv from "dotenv";
 import jwt from "jsonwebtoken";
-import nodemailer from "nodemailer";
+import { Resend } from "resend";
 import User from "../models/User.js";
 
 dotenv.config();
@@ -11,40 +11,27 @@ dotenv.config();
 // Generate a six-digit OTP
 const generateOTP = () => crypto.randomInt(100000, 1000000).toString();
 
-// Create Gmail transporter
-const createTransporter = () => {
-  const emailUser = process.env.EMAIL_USER?.trim();
-  const emailPass = process.env.EMAIL_PASS?.replace(/\s+/g, "");
+// Send OTP email using Resend API
+const sendOtpEmail = async ({
+  email,
+  fullName,
+  otp,
+  purpose = "signup",
+}) => {
+  const apiKey = process.env.RESEND_API_KEY;
 
-  if (!emailUser || !emailPass) {
-    console.error("Email service configuration is missing.");
-    throw new Error("Email service is not configured on the server.");
+  if (!apiKey) {
+    throw new Error("RESEND_API_KEY is not configured on the server.");
   }
 
-  const transporter = nodemailer.createTransport({
-    service: "gmail",
-    auth: {
-      user: emailUser,
-      pass: emailPass,
-    },
-    connectionTimeout: 15000,
-    greetingTimeout: 10000,
-    socketTimeout: 20000,
-  });
-
-  console.log("Email transporter created.");
-  return transporter;
-};
-
-// Send an OTP email
-const sendOtpEmail = async ({ email, fullName, otp, purpose = "signup" }) => {
-  const transporter = createTransporter();
-
+  const resend = new Resend(apiKey);
   const isSignup = purpose === "signup";
 
-  const mailOptions = {
-    from: `CIVIX <${process.env.EMAIL_USER.trim()}>`,
-    to: email,
+  console.log("Sending OTP email using Resend API...");
+
+  const { data, error } = await resend.emails.send({
+    from: "CIVIX <onboarding@resend.dev>",
+    to: [email],
     subject: isSignup
       ? "Verify your CIVIX account"
       : "Your CIVIX Password Reset OTP",
@@ -58,23 +45,22 @@ const sendOtpEmail = async ({ email, fullName, otp, purpose = "signup" }) => {
         <p>If you did not request this, please ignore this email.</p>
       </div>
     `,
-  };
-
-  console.log("Starting OTP email delivery.");
-
-  const result = await transporter.sendMail(mailOptions);
-
-  console.log("OTP email delivery completed.", {
-    messageId: result.messageId,
-    acceptedCount: result.accepted?.length ?? 0,
-    rejectedCount: result.rejected?.length ?? 0,
   });
 
-  if (!result.accepted?.length) {
-    throw new Error("The email server did not accept the recipient.");
+  if (error) {
+    console.error("Resend email API error:", {
+      message: error.message,
+      name: error.name,
+    });
+
+    throw new Error(error.message || "Resend failed to send the email.");
   }
 
-  return result;
+  console.log("Resend accepted the email request.", {
+    emailId: data?.id || "No ID returned",
+  });
+
+  return data;
 };
 
 // --------------------
@@ -139,12 +125,9 @@ export const signup = async (req, res) => {
     } catch (emailError) {
       console.error("OTP email delivery failed:", {
         message: emailError.message,
-        code: emailError.code || "No code",
-        command: emailError.command || "No command",
-        responseCode: emailError.responseCode || "No response code",
       });
 
-      // Remove the unverified account if email delivery fails
+      // Delete the unverified account if email sending fails
       try {
         await User.deleteOne({ _id: user._id });
         console.log("Unverified signup account removed after email failure.");
@@ -184,7 +167,7 @@ export const signup = async (req, res) => {
       });
     }
 
-    if (err.message?.includes("Email service is not configured")) {
+    if (err.message?.includes("RESEND_API_KEY is not configured")) {
       return res.status(500).json({
         error: "Email service is not configured on the server.",
       });
@@ -274,7 +257,6 @@ export const forgotPassword = async (req, res) => {
     }
 
     const normalizedEmail = email.toLowerCase().trim();
-
     const user = await User.findOne({ email: normalizedEmail });
 
     // Do not reveal whether an account exists
@@ -301,9 +283,6 @@ export const forgotPassword = async (req, res) => {
     } catch (emailError) {
       console.error("Password reset email failed:", {
         message: emailError.message,
-        code: emailError.code || "No code",
-        command: emailError.command || "No command",
-        responseCode: emailError.responseCode || "No response code",
       });
 
       return res.status(500).json({
@@ -324,7 +303,7 @@ export const forgotPassword = async (req, res) => {
 };
 
 // --------------------
-// VERIFY OTP (signup or forgot-password)
+// VERIFY OTP
 // --------------------
 export const verifyOtp = async (req, res) => {
   try {
