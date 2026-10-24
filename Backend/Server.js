@@ -12,7 +12,7 @@ import authRoutes from "./routes/auth.js";
 import dashboardRoutes from "./routes/dashboard.js";
 import officialsRoutes from "./routes/officials.js";
 import petitionRoutes from "./routes/petitions.js";
-import pollRoutes from "./routes/Polls.js";
+import pollRoutes from "./routes/polls.js";
 import reportRoutes from './routes/reports.js';
 import settingsRoutes from "./routes/settings.js";
 dotenv.config();
