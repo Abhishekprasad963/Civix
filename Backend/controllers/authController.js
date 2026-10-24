@@ -1,3 +1,4 @@
+
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import dotenv from "dotenv";
@@ -7,134 +8,190 @@ import User from "../models/User.js";
 
 dotenv.config();
 
-// Reusable helpers
-const generateOTP = () => crypto.randomInt(100000, 999999).toString();
+// Generate a six-digit OTP
+const generateOTP = () => crypto.randomInt(100000, 1000000).toString();
 
+// Create Gmail transporter
 const createTransporter = () => {
   const emailUser = process.env.EMAIL_USER?.trim();
   const emailPass = process.env.EMAIL_PASS?.replace(/\s+/g, "");
 
   if (!emailUser || !emailPass) {
-    console.error("FATAL: Email credentials are not configured in .env file.");
+    console.error("Email service configuration is missing.");
     throw new Error("Email service is not configured on the server.");
   }
+
   const transporter = nodemailer.createTransport({
     service: "gmail",
     auth: {
       user: emailUser,
       pass: emailPass,
     },
+    connectionTimeout: 15000,
+    greetingTimeout: 10000,
+    socketTimeout: 20000,
   });
 
-  console.log("✉️ Email transporter created");
+  console.log("Email transporter created.");
   return transporter;
+};
+
+// Send an OTP email
+const sendOtpEmail = async ({ email, fullName, otp, purpose = "signup" }) => {
+  const transporter = createTransporter();
+
+  const isSignup = purpose === "signup";
+
+  const mailOptions = {
+    from: `CIVIX <${process.env.EMAIL_USER.trim()}>`,
+    to: email,
+    subject: isSignup
+      ? "Verify your CIVIX account"
+      : "Your CIVIX Password Reset OTP",
+    html: `
+      <div style="font-family: Arial, sans-serif; padding: 20px; color: #222;">
+        <h2>${isSignup ? "Welcome to CIVIX!" : "Password Reset Request"}</h2>
+        ${fullName ? `<p>Hello ${fullName},</p>` : ""}
+        <p>Your One-Time Password (OTP) is:</p>
+        <h1 style="color: #10b981; letter-spacing: 5px;">${otp}</h1>
+        <p>This OTP is valid for <strong>10 minutes</strong>.</p>
+        <p>If you did not request this, please ignore this email.</p>
+      </div>
+    `,
+  };
+
+  console.log("Starting OTP email delivery.");
+
+  const result = await transporter.sendMail(mailOptions);
+
+  console.log("OTP email delivery completed.", {
+    messageId: result.messageId,
+    acceptedCount: result.accepted?.length ?? 0,
+    rejectedCount: result.rejected?.length ?? 0,
+  });
+
+  if (!result.accepted?.length) {
+    throw new Error("The email server did not accept the recipient.");
+  }
+
+  return result;
 };
 
 // --------------------
 // SIGNUP (with OTP)
 // --------------------
 export const signup = async (req, res) => {
+  let user;
+
   try {
     const { fullName, email, password, role } = req.body;
 
-    console.log("📝 Signup attempt:", { fullName, email, role });
+    console.log("Signup attempt:", {
+      email,
+      role: role || "citizen",
+    });
 
-    // Validation
-    if (!fullName || !email || !password) {
-      return res.status(400).json({ error: "All fields are required" });
+    if (!fullName?.trim() || !email?.trim() || !password) {
+      return res.status(400).json({
+        error: "All fields are required",
+      });
     }
 
     if (password.length < 6) {
-      return res.status(400).json({ error: "Password must be at least 6 characters" });
+      return res.status(400).json({
+        error: "Password must be at least 6 characters",
+      });
     }
 
-    // Check if user exists
-    let user = await User.findOne({ email: email.toLowerCase().trim() });
-    if (user) {
-      return res.status(400).json({ error: "User already exists with this email" });
+    const normalizedEmail = email.toLowerCase().trim();
+
+    const existingUser = await User.findOne({ email: normalizedEmail });
+
+    if (existingUser) {
+      return res.status(400).json({
+        error: "User already exists with this email",
+      });
     }
 
-    // Generate OTP & expiry
     const otp = generateOTP();
-    const otpExpiry = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
 
-    // Create new user
     user = new User({
       fullName: fullName.trim(),
-      email: email.toLowerCase().trim(),
-      password: password,
+      email: normalizedEmail,
+      password,
       role: (role || "citizen").toLowerCase(),
       isVerified: false,
       otp,
-      otpExpiry
+      otpExpiry: new Date(Date.now() + 10 * 60 * 1000),
     });
 
     await user.save();
-    console.log("✅ User created successfully:", user.email);
 
-    // Debug log OTP
-    console.log(`🔹 OTP for ${email}: ${otp}`);
+    console.log("Unverified signup user created:", normalizedEmail);
 
-    // Send OTP email
     try {
-      console.log("📧 Attempting to send email...");
-      const transporter = createTransporter();
-      
-      const mailOptions = {
-        from: `CIVIX <${process.env.EMAIL_USER}>`,
-        to: email,
-        subject: "Verify your CIVIX account",
-        html: `
-          <div style="font-family: Arial, sans-serif; padding: 20px;">
-            <h2>Welcome to CIVIX!</h2>
-            <p>Hello ${fullName},</p>
-            <p>Your One-Time Password (OTP) is:</p>
-            <h1 style="color: #10b981; letter-spacing: 5px;">${otp}</h1>
-            <p>This OTP is valid for <strong>10 minutes</strong>.</p>
-            <p>If you didn't request this, please ignore this email.</p>
-          </div>
-        `
-      };
-      
-      await transporter.sendMail(mailOptions);
-      console.log("📧 OTP email sent successfully to:", email);
+      await sendOtpEmail({
+        email: normalizedEmail,
+        fullName: fullName.trim(),
+        otp,
+        purpose: "signup",
+      });
     } catch (emailError) {
-      console.error("❌ Email sending failed:", emailError.message);
-      
-      // Delete the user if email fails
-      await User.deleteOne({ _id: user._id });
-      
-      return res.status(500).json({ 
+      console.error("OTP email delivery failed:", {
+        message: emailError.message,
+        code: emailError.code || "No code",
+        command: emailError.command || "No command",
+        responseCode: emailError.responseCode || "No response code",
+      });
+
+      // Remove the unverified account if email delivery fails
+      try {
+        await User.deleteOne({ _id: user._id });
+        console.log("Unverified signup account removed after email failure.");
+      } catch (deleteError) {
+        console.error(
+          "Could not remove unverified account:",
+          deleteError.message
+        );
+      }
+
+      return res.status(500).json({
         error: "Failed to send verification email. Please try again later.",
-        details: process.env.NODE_ENV === 'development' ? emailError.message : undefined
       });
     }
 
-    return res.status(201).json({ 
+    return res.status(201).json({
       message: "OTP sent to email",
-      email: email 
+      email: normalizedEmail,
+    });
+  } catch (err) {
+    console.error("Signup error:", {
+      message: err.message,
+      code: err.code || "No code",
     });
 
-  } catch (err) {
-    console.error("❌ Signup Error:", err);
-
     if (err.code === 11000) {
-      return res.status(400).json({ error: "Email already exists" });
+      return res.status(400).json({
+        error: "Email already exists",
+      });
     }
 
     if (err.name === "ValidationError") {
-      const errors = Object.values(err.errors).map(e => e.message);
-      return res.status(400).json({ error: errors.join(", ") });
-    }
+      const errors = Object.values(err.errors).map((e) => e.message);
 
-    if (err.message && err.message.includes("Email service is not configured")) {
-      return res.status(500).json({ 
-        error: "Email service not configured on server." 
+      return res.status(400).json({
+        error: errors.join(", "),
       });
     }
 
-    return res.status(500).json({ 
-      error: "Server error during registration. Please try again." 
+    if (err.message?.includes("Email service is not configured")) {
+      return res.status(500).json({
+        error: "Email service is not configured on the server.",
+      });
+    }
+
+    return res.status(500).json({
+      error: "Server error during registration. Please try again.",
     });
   }
 };
@@ -145,98 +202,123 @@ export const signup = async (req, res) => {
 export const login = async (req, res) => {
   try {
     const { email, password } = req.body;
-    
-    console.log("🔐 Login attempt:", email);
+
+    console.log("Login attempt:", email);
 
     if (!email || !password) {
-      return res.status(400).json({ error: "Email and password are required" });
+      return res.status(400).json({
+        error: "Email and password are required",
+      });
     }
 
-    const user = await User.findOne({ email: email.toLowerCase().trim() })
-      .select("+password");
-    
+    const user = await User.findOne({
+      email: email.toLowerCase().trim(),
+    }).select("+password");
+
     if (!user) {
-      return res.status(400).json({ error: "Invalid credentials" });
+      return res.status(400).json({
+        error: "Invalid credentials",
+      });
     }
 
     const isMatch = await bcrypt.compare(password, user.password);
+
     if (!isMatch) {
-      return res.status(400).json({ error: "Invalid credentials" });
+      return res.status(400).json({
+        error: "Invalid credentials",
+      });
+    }
+
+    if (!process.env.JWT_SECRET) {
+      throw new Error("JWT_SECRET is not configured.");
     }
 
     const token = jwt.sign(
-      { id: user._id, role: user.role }, 
-      process.env.JWT_SECRET, 
+      { id: user._id, role: user.role },
+      process.env.JWT_SECRET,
       { expiresIn: "7d" }
     );
 
-    console.log("✅ Login successful:", email);
+    console.log("Login successful:", email);
 
-    res.json({
+    return res.json({
       token,
       user: {
         id: user._id,
         _id: user._id,
         fullName: user.fullName,
         email: user.email,
-        role: user.role
-      }
+        role: user.role,
+      },
     });
   } catch (err) {
-    console.error("❌ Login Error:", err);
-    res.status(500).json({ error: "Server error" });
+    console.error("Login error:", err.message);
+
+    return res.status(500).json({
+      error: "Server error",
+    });
   }
 };
 
-// ======================
-// Password Reset / OTP Logic
-// ======================
+// --------------------
+// FORGOT PASSWORD
+// --------------------
 export const forgotPassword = async (req, res) => {
   try {
     const { email } = req.body;
-    
+
     if (!email) {
-      return res.status(400).json({ error: "Email is required" });
+      return res.status(400).json({
+        error: "Email is required",
+      });
     }
 
-    const user = await User.findOne({ email: email.toLowerCase().trim() });
-    
+    const normalizedEmail = email.toLowerCase().trim();
+
+    const user = await User.findOne({ email: normalizedEmail });
+
+    // Do not reveal whether an account exists
     if (!user) {
-      // Don't reveal if email exists
-      return res.json({ 
-        message: "If this email is registered, you will receive an OTP." 
+      return res.json({
+        message: "If this email is registered, you will receive an OTP.",
       });
     }
 
     const otp = generateOTP();
+
     user.otp = otp;
     user.otpExpiry = new Date(Date.now() + 10 * 60 * 1000);
 
     await user.save();
 
-    console.log(`🔹 Password Reset OTP for ${email}: ${otp}`);
+    try {
+      await sendOtpEmail({
+        email: normalizedEmail,
+        fullName: user.fullName,
+        otp,
+        purpose: "forgot-password",
+      });
+    } catch (emailError) {
+      console.error("Password reset email failed:", {
+        message: emailError.message,
+        code: emailError.code || "No code",
+        command: emailError.command || "No command",
+        responseCode: emailError.responseCode || "No response code",
+      });
 
-    const transporter = createTransporter();
-    await transporter.sendMail({
-      from: `CIVIX <${process.env.EMAIL_USER}>`,
-      to: email,
-      subject: "Your Password Reset OTP",
-      html: `
-        <div style="font-family: Arial, sans-serif; padding: 20px;">
-          <h2>Password Reset Request</h2>
-          <p>Your One-Time Password is:</p>
-          <h1 style="color: #10b981; letter-spacing: 5px;">${otp}</h1>
-          <p>It will expire in <strong>10 minutes</strong>.</p>
-          <p>If you didn't request this, please ignore this email.</p>
-        </div>
-      `,
+      return res.status(500).json({
+        error: "Failed to send the password reset email. Please try again later.",
+      });
+    }
+
+    return res.json({
+      message: "OTP sent to email successfully.",
     });
-
-    res.json({ message: "OTP sent to email successfully." });
   } catch (err) {
-    console.error("❌ Error in forgotPassword:", err);
-    res.status(500).json({ 
-      error: "An error occurred while trying to send the reset email." 
+    console.error("Forgot password error:", err.message);
+
+    return res.status(500).json({
+      error: "An error occurred while trying to send the reset email.",
     });
   }
 };
@@ -247,40 +329,56 @@ export const forgotPassword = async (req, res) => {
 export const verifyOtp = async (req, res) => {
   try {
     const { email, otp, action } = req.body;
-    
-    console.log("🔍 OTP verification attempt:", { email, action });
+
+    console.log("OTP verification attempt:", {
+      email,
+      action: action || "unspecified",
+    });
 
     if (!email || !otp) {
-      return res.status(400).json({ error: "Email and OTP are required" });
+      return res.status(400).json({
+        error: "Email and OTP are required",
+      });
     }
 
-    const user = await User.findOne({ email: email.toLowerCase().trim() })
-      .select('+otp +otpExpiry +isVerified +password +role');
-    
+    const user = await User.findOne({
+      email: email.toLowerCase().trim(),
+    }).select("+otp +otpExpiry +isVerified +password +role");
+
     if (!user || !user.otp || !user.otpExpiry) {
-      return res.status(400).json({ error: "Invalid OTP request." });
+      return res.status(400).json({
+        error: "Invalid OTP request.",
+      });
     }
 
     if (user.otpExpiry < new Date()) {
-      return res.status(400).json({ error: "OTP has expired" });
+      return res.status(400).json({
+        error: "OTP has expired",
+      });
     }
 
-    if (user.otp !== otp) {
-      return res.status(400).json({ error: "Invalid OTP" });
+    if (String(user.otp) !== String(otp).trim()) {
+      return res.status(400).json({
+        error: "Invalid OTP",
+      });
     }
 
     if (action === "signup") {
       user.isVerified = true;
       user.otp = undefined;
       user.otpExpiry = undefined;
+
       await user.save();
 
-      console.log("✅ User verified:", email);
+      console.log("User account verified:", email);
 
-      // Generate token and log user in
+      if (!process.env.JWT_SECRET) {
+        throw new Error("JWT_SECRET is not configured.");
+      }
+
       const token = jwt.sign(
-        { id: user._id, role: user.role }, 
-        process.env.JWT_SECRET, 
+        { id: user._id, role: user.role },
+        process.env.JWT_SECRET,
         { expiresIn: "7d" }
       );
 
@@ -292,20 +390,21 @@ export const verifyOtp = async (req, res) => {
           _id: user._id,
           fullName: user.fullName,
           email: user.email,
-          role: user.role
-        }
+          role: user.role,
+        },
       });
     }
 
-    // For forgot password flow - just verify OTP
-    return res.json({ 
+    return res.json({
       message: "OTP verified successfully",
-      email: user.email 
+      email: user.email,
     });
-    
   } catch (err) {
-    console.error("❌ Error in verifyOtp:", err);
-    res.status(500).json({ error: "Server error" });
+    console.error("OTP verification error:", err.message);
+
+    return res.status(500).json({
+      error: "Server error",
+    });
   }
 };
 
@@ -315,43 +414,57 @@ export const verifyOtp = async (req, res) => {
 export const resetPassword = async (req, res) => {
   try {
     const { email, otp, newPassword } = req.body;
-    
-    if (!email || !otp || !newPassword) {
-      return res.status(400).json({ error: "All fields are required" });
-    }
 
-    if (newPassword.length < 6) {
-      return res.status(400).json({ 
-        error: "Password must be at least 6 characters" 
+    if (!email || !otp || !newPassword) {
+      return res.status(400).json({
+        error: "All fields are required",
       });
     }
 
-    const user = await User.findOne({ email: email.toLowerCase().trim() })
-      .select('+otp +otpExpiry +password');
-    
+    if (newPassword.length < 6) {
+      return res.status(400).json({
+        error: "Password must be at least 6 characters",
+      });
+    }
+
+    const user = await User.findOne({
+      email: email.toLowerCase().trim(),
+    }).select("+otp +otpExpiry +password");
+
     if (!user || !user.otp || !user.otpExpiry) {
-      return res.status(400).json({ error: "Invalid OTP request." });
+      return res.status(400).json({
+        error: "Invalid OTP request.",
+      });
     }
 
     if (user.otpExpiry < new Date()) {
-      return res.status(400).json({ error: "OTP has expired" });
+      return res.status(400).json({
+        error: "OTP has expired",
+      });
     }
 
-    if (user.otp !== otp) {
-      return res.status(400).json({ error: "Invalid OTP" });
+    if (String(user.otp) !== String(otp).trim()) {
+      return res.status(400).json({
+        error: "Invalid OTP",
+      });
     }
 
-    // Set new password
     user.password = newPassword;
     user.otp = undefined;
     user.otpExpiry = undefined;
+
     await user.save();
 
-    console.log("✅ Password reset successful:", email);
+    console.log("Password reset successful:", email);
 
-    res.json({ message: "Password reset successfully" });
+    return res.json({
+      message: "Password reset successfully",
+    });
   } catch (err) {
-    console.error("❌ resetPassword error:", err);
-    res.status(500).json({ error: "Server error" });
+    console.error("Reset password error:", err.message);
+
+    return res.status(500).json({
+      error: "Server error",
+    });
   }
 };
