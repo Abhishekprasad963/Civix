@@ -1,4 +1,6 @@
+
 import { useEffect, useState } from "react";
+import API from "../api";
 
 // Eye Icon SVGs for password visibility
 const EyeIcon = () => (
@@ -48,36 +50,39 @@ const OfficialSettings = () => {
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
-  const defaultProfileIcon = "https://cdn-icons-png.flaticon.com/512/847/847969.png";
+  const defaultProfileIcon =
+    "https://cdn-icons-png.flaticon.com/512/847/847969.png";
 
+  // Fetch profile data
   useEffect(() => {
     const fetchUserData = async () => {
       try {
-        const token = localStorage.getItem("token") || localStorage.getItem("authToken");
-        if (!token) throw new Error("No authentication token found. Please log in again.");
+        const response = await API.client.get("/settings/me");
+        const userData = response.data;
 
-        const response = await fetch("http://localhost:5000/api/settings/me", {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-
-        if (!response.ok) throw new Error(`Failed to fetch user data: ${response.status}`);
-        
-        const userData = await response.json();
         setFormData({
           fullName: userData.fullName || "",
           email: userData.email || "",
         });
+
         setProfilePic(userData.profilePic || null);
       } catch (err) {
-        console.error("❌ Error fetching user data:", err);
-        setErrorMessage(`Failed to load profile: ${err.message}`);
+        console.error("Error fetching user data:", err);
+        setErrorMessage(
+          `Failed to load profile: ${
+            err.response?.data?.error || err.message
+          }`
+        );
       }
     };
+
     fetchUserData();
   }, []);
 
+  // Automatically hide success message
   useEffect(() => {
     if (!successMessage) return;
+
     const t = setTimeout(() => setSuccessMessage(""), 3000);
     return () => clearTimeout(t);
   }, [successMessage]);
@@ -86,34 +91,27 @@ const OfficialSettings = () => {
     setFormData((p) => ({ ...p, [field]: value }));
   };
 
+  // Update profile
   const handleProfileUpdate = async () => {
     try {
-      const token = localStorage.getItem("token") || localStorage.getItem("authToken");
-      if (!token) throw new Error("No authentication token found. Please log in again.");
-
-      const response = await fetch("http://localhost:5000/api/settings/update", {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ fullName: formData.fullName }),
+      await API.client.put("/settings/update", {
+        fullName: formData.fullName,
       });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || `Request failed with status ${response.status}`);
-      }
-      
-      await response.json();
       setSuccessMessage("Profile updated successfully!");
       setErrorMessage("");
     } catch (err) {
-      console.error("❌ Profile update error:", err);
-      setErrorMessage(`Profile update failed: ${err.message}`);
+      console.error("Profile update error:", err);
+      setErrorMessage(
+        `Profile update failed: ${
+          err.response?.data?.error || err.message
+        }`
+      );
+      setSuccessMessage("");
     }
   };
 
+  // Update password
   const handlePasswordUpdate = async (e) => {
     e.preventDefault();
     setErrorMessage("");
@@ -123,27 +121,23 @@ const OfficialSettings = () => {
       setErrorMessage("Fill all password fields");
       return;
     }
+
     if (newPassword !== confirmPassword) {
       setErrorMessage("New password and confirm password do not match");
       return;
     }
+
     if (newPassword.length < 6) {
       setErrorMessage("Password must be at least 6 characters");
       return;
     }
 
     try {
-      const token = localStorage.getItem("token") || localStorage.getItem("authToken");
-      if (!token) throw new Error("No authentication token found. Please log in again.");
-
-      const response = await fetch("http://localhost:5000/api/settings/update-password", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ currentPassword, newPassword, confirmPassword }),
+      await API.client.put("/settings/update-password", {
+        currentPassword,
+        newPassword,
+        confirmPassword,
       });
-
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || `Request failed with status ${response.status}`);
 
       setSuccessMessage("Password updated successfully!");
       setErrorMessage("");
@@ -151,8 +145,12 @@ const OfficialSettings = () => {
       setNewPassword("");
       setConfirmPassword("");
     } catch (err) {
-      console.error("❌ Password update error:", err);
-      setErrorMessage(`Password update failed: ${err.message}`);
+      console.error("Password update error:", err);
+      setErrorMessage(
+        `Password update failed: ${
+          err.response?.data?.error || err.message
+        }`
+      );
       setSuccessMessage("");
     }
   };
@@ -169,45 +167,64 @@ const OfficialSettings = () => {
       case "profile":
         return (
           <>
-            <h2 className="text-xl md:text-2xl font-semibold text-gray-800 mb-4 md:mb-6">Profile & Personal Information</h2>
+            <h2 className="text-xl md:text-2xl font-semibold text-gray-800 mb-4 md:mb-6">
+              Profile & Personal Information
+            </h2>
+
             <div className="flex flex-col sm:flex-row items-center gap-4 md:gap-6 mb-6 md:mb-8">
               <div className="relative w-20 h-20 md:w-24 md:h-24">
-                <img 
-                  src={profilePic || defaultProfileIcon} 
-                  alt="Profile" 
-                  className="w-full h-full rounded-full object-cover border-2 border-gray-200 bg-gray-100" 
+                <img
+                  src={profilePic || defaultProfileIcon}
+                  alt="Profile"
+                  className="w-full h-full rounded-full object-cover border-2 border-gray-200 bg-gray-100"
                 />
               </div>
+
               <div className="text-center sm:text-left">
-                <h3 className="text-lg md:text-xl font-semibold text-gray-800">{formData.fullName || "Loading..."}</h3>
-                <p className="text-gray-500 text-sm md:text-base">{formData.email || "Loading..."}</p>
+                <h3 className="text-lg md:text-xl font-semibold text-gray-800">
+                  {formData.fullName || "Loading..."}
+                </h3>
+                <p className="text-gray-500 text-sm md:text-base">
+                  {formData.email || "Loading..."}
+                </p>
               </div>
             </div>
+
             <div className="mb-6 md:mb-8">
-              <label className="block text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Full Name</label>
-              <input 
-                type="text" 
-                value={formData.fullName} 
-                onChange={(e) => handleInputChange("fullName", e.target.value)} 
-                className="w-full px-3 md:px-4 py-2 md:py-3 bg-gray-100 border-0 rounded-lg text-gray-800 focus:ring-2 focus:ring-blue-500 text-sm md:text-base" 
-                placeholder="Enter your full name" 
+              <label className="block text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">
+                Full Name
+              </label>
+              <input
+                type="text"
+                value={formData.fullName}
+                onChange={(e) =>
+                  handleInputChange("fullName", e.target.value)
+                }
+                className="w-full px-3 md:px-4 py-2 md:py-3 bg-gray-100 border-0 rounded-lg text-gray-800 focus:ring-2 focus:ring-blue-500 text-sm md:text-base"
+                placeholder="Enter your full name"
               />
             </div>
+
             <div className="mb-6 md:mb-8">
-              <label className="block text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">E-mail Address</label>
+              <label className="block text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">
+                E-mail Address
+              </label>
               <div className="relative">
-                <input 
-                  type="email" 
-                  value={formData.email} 
-                  disabled 
-                  className="w-full px-3 md:px-4 py-2 md:py-3 bg-gray-100 border-0 rounded-lg text-gray-800 cursor-not-allowed text-sm md:text-base" 
+                <input
+                  type="email"
+                  value={formData.email}
+                  disabled
+                  className="w-full px-3 md:px-4 py-2 md:py-3 bg-gray-100 border-0 rounded-lg text-gray-800 cursor-not-allowed text-sm md:text-base"
                 />
-                <span className="absolute right-3 top-1/2 transform -translate-y-1/2 text-xs font-medium text-green-500 bg-green-50 px-2 py-1 rounded">✓ VERIFIED</span>
+                <span className="absolute right-3 top-1/2 transform -translate-y-1/2 text-xs font-medium text-green-500 bg-green-50 px-2 py-1 rounded">
+                  ✓ VERIFIED
+                </span>
               </div>
             </div>
+
             <div className="flex items-center gap-3">
-              <button 
-                onClick={handleProfileUpdate} 
+              <button
+                onClick={handleProfileUpdate}
                 className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 text-sm md:text-base w-full sm:w-auto"
               >
                 Save Changes
@@ -215,10 +232,14 @@ const OfficialSettings = () => {
             </div>
           </>
         );
+
       case "security":
         return (
           <>
-            <h2 className="text-xl md:text-2xl font-semibold text-gray-800 mb-4 md:mb-6">Security & Privacy</h2>
+            <h2 className="text-xl md:text-2xl font-semibold text-gray-800 mb-4 md:mb-6">
+              Security & Privacy
+            </h2>
+
             <form onSubmit={handlePasswordUpdate} className="space-y-4">
               {/* Current Password Field */}
               <div className="relative">
@@ -230,14 +251,17 @@ const OfficialSettings = () => {
                   className="w-full px-3 md:px-4 py-2 md:py-3 bg-gray-100 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm md:text-base"
                   required
                 />
-                <button 
-                  type="button" 
-                  onClick={() => setShowCurrentPassword(!showCurrentPassword)} 
+                <button
+                  type="button"
+                  onClick={() =>
+                    setShowCurrentPassword(!showCurrentPassword)
+                  }
                   className="absolute inset-y-0 right-0 flex items-center pr-3"
                 >
                   {showCurrentPassword ? <EyeSlashIcon /> : <EyeIcon />}
                 </button>
               </div>
+
               {/* New Password Field */}
               <div className="relative">
                 <input
@@ -247,16 +271,17 @@ const OfficialSettings = () => {
                   onChange={(e) => setNewPassword(e.target.value)}
                   className="w-full px-3 md:px-4 py-2 md:py-3 bg-gray-100 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm md:text-base"
                   required
-                  minLength="6"
+                  minLength={6}
                 />
-                <button 
-                  type="button" 
-                  onClick={() => setShowNewPassword(!showNewPassword)} 
+                <button
+                  type="button"
+                  onClick={() => setShowNewPassword(!showNewPassword)}
                   className="absolute inset-y-0 right-0 flex items-center pr-3"
                 >
                   {showNewPassword ? <EyeSlashIcon /> : <EyeIcon />}
                 </button>
               </div>
+
               {/* Confirm Password Field */}
               <div className="relative">
                 <input
@@ -267,16 +292,19 @@ const OfficialSettings = () => {
                   className="w-full px-3 md:px-4 py-2 md:py-3 bg-gray-100 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm md:text-base"
                   required
                 />
-                <button 
-                  type="button" 
-                  onClick={() => setShowConfirmPassword(!showConfirmPassword)} 
+                <button
+                  type="button"
+                  onClick={() =>
+                    setShowConfirmPassword(!showConfirmPassword)
+                  }
                   className="absolute inset-y-0 right-0 flex items-center pr-3"
                 >
                   {showConfirmPassword ? <EyeSlashIcon /> : <EyeIcon />}
                 </button>
               </div>
-              <button 
-                type="submit" 
+
+              <button
+                type="submit"
                 className="bg-violet-600 text-white px-6 py-2 rounded-lg hover:bg-violet-700 focus:ring-2 focus:ring-violet-500 text-sm md:text-base w-full sm:w-auto"
               >
                 Update Password
@@ -284,6 +312,7 @@ const OfficialSettings = () => {
             </form>
           </>
         );
+
       default:
         return null;
     }
@@ -295,21 +324,22 @@ const OfficialSettings = () => {
       <div className="fixed left-0 top-0 h-full w-80 max-w-[85vw] bg-white p-6 shadow-xl flex flex-col">
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-xl font-bold text-gray-800">Settings</h1>
-          <button 
+          <button
             onClick={() => setShowMobileSidebar(false)}
             className="text-2xl text-gray-600 hover:text-gray-800"
           >
             ×
           </button>
         </div>
+
         <div className="space-y-2 flex-1 overflow-y-auto">
           {sidebarItems.map((item) => (
-            <button 
-              key={item.id} 
-              onClick={() => handleSectionChange(item.id)} 
+            <button
+              key={item.id}
+              onClick={() => handleSectionChange(item.id)}
               className={`w-full text-left p-4 rounded-xl transition-all hover:bg-gray-100 ${
-                activeSection === item.id 
-                  ? "bg-blue-50 border-l-4 border-blue-500 text-blue-800" 
+                activeSection === item.id
+                  ? "bg-blue-50 border-l-4 border-blue-500 text-blue-800"
                   : "text-gray-700"
               }`}
             >
@@ -319,7 +349,9 @@ const OfficialSettings = () => {
                 </div>
                 <div className="flex-1">
                   <h3 className="font-semibold text-sm">{item.title}</h3>
-                  <p className="text-xs text-gray-500 mt-1">{item.subtitle}</p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    {item.subtitle}
+                  </p>
                 </div>
                 <span className="text-gray-400 text-xl">›</span>
               </div>
@@ -335,7 +367,7 @@ const OfficialSettings = () => {
     <div className="lg:hidden bg-white border-b border-gray-200 p-4 mb-4">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <button 
+          <button
             onClick={() => setShowMobileSidebar(true)}
             className="text-2xl text-gray-600"
           >
@@ -343,7 +375,9 @@ const OfficialSettings = () => {
           </button>
           <h1 className="text-lg font-bold text-gray-800">Settings</h1>
         </div>
-        <div className="text-sm text-gray-600 capitalize">{activeSection}</div>
+        <div className="text-sm text-gray-600 capitalize">
+          {activeSection}
+        </div>
       </div>
     </div>
   );
@@ -351,9 +385,8 @@ const OfficialSettings = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 to-green-100 p-3 md:p-4 lg:p-6">
       {/* Success Message */}
-      {/* Success Message */}
-{successMessage && (
-  <div className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-50 max-w-xs md:max-w-md w-full mx-4">
+      {successMessage && (
+        <div className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-50 max-w-xs md:max-w-md w-full mx-4">
           <div className="bg-green-100 border-l-4 border-green-500 text-green-800 px-4 md:px-6 py-3 rounded-lg shadow-md text-sm md:text-base">
             {successMessage}
           </div>
@@ -379,15 +412,18 @@ const OfficialSettings = () => {
       <div className="flex flex-col lg:flex-row w-full h-full bg-white rounded-xl md:rounded-2xl shadow-lg overflow-hidden max-w-7xl mx-auto">
         {/* Desktop Sidebar - Hidden on mobile */}
         <div className="hidden lg:block w-80 p-6 md:p-8 border-r border-gray-200">
-          <h1 className="text-2xl font-bold text-gray-800 mb-6 md:mb-8">Settings</h1>
+          <h1 className="text-2xl font-bold text-gray-800 mb-6 md:mb-8">
+            Settings
+          </h1>
+
           <div className="space-y-2">
             {sidebarItems.map((item) => (
-              <button 
-                key={item.id} 
-                onClick={() => handleSectionChange(item.id)} 
+              <button
+                key={item.id}
+                onClick={() => handleSectionChange(item.id)}
                 className={`w-full text-left p-4 rounded-xl transition-all hover:bg-gray-100 ${
-                  activeSection === item.id 
-                    ? "bg-blue-50 border-l-4 border-blue-500 text-blue-800" 
+                  activeSection === item.id
+                    ? "bg-blue-50 border-l-4 border-blue-500 text-blue-800"
                     : "text-gray-700"
                 }`}
               >
@@ -397,7 +433,9 @@ const OfficialSettings = () => {
                   </div>
                   <div className="flex-1">
                     <h3 className="font-semibold text-base">{item.title}</h3>
-                    <p className="text-sm text-gray-500 mt-1">{item.subtitle}</p>
+                    <p className="text-sm text-gray-500 mt-1">
+                      {item.subtitle}
+                    </p>
                   </div>
                   <span className="text-gray-400 text-2xl">›</span>
                 </div>
@@ -408,9 +446,7 @@ const OfficialSettings = () => {
 
         {/* Main Content */}
         <div className="flex-1 p-4 sm:p-6 md:p-8 lg:p-10">
-          <div className="max-w-2xl">
-            {renderContent()}
-          </div>
+          <div className="max-w-2xl">{renderContent()}</div>
         </div>
       </div>
     </div>

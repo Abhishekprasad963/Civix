@@ -1,6 +1,8 @@
 
-import axios from "axios";
+/* import axios from "axios";
+import { useEffect, useState } from "react"; */
 import { useEffect, useState } from "react";
+import API from "../api";
 
 const ParticipatePolls = () => {
   const [polls, setPolls] = useState([]);
@@ -10,7 +12,7 @@ const ParticipatePolls = () => {
   useEffect(() => {
     const fetchPolls = async () => {
       const userId = localStorage.getItem("userId");
-      const res = await axios.get("http://localhost:5000/api/polls");
+      const res = await API.client.get("/polls");
       let pollsData = res.data.map((poll) => ({
         id: poll._id,
         question: poll.title,
@@ -23,7 +25,7 @@ const ParticipatePolls = () => {
         closesOn: poll.closeDate,
       }));
       if (userId) {
-        const votedRes = await axios.get(`http://localhost:5000/api/polls/voted?userId=${userId}`);
+        const votedRes = await API.client.get(`/polls/voted?userId=${userId}`);
         const votedPollIds = votedRes.data;
         pollsData = pollsData.map((poll) => ({
           ...poll,
@@ -43,14 +45,14 @@ const ParticipatePolls = () => {
       return;
     }
     try {
-      await axios.post(`http://localhost:5000/api/polls/${pollId}/vote`, {
+      await API.client.post(`/polls/${pollId}/vote`, {
         userId,
         selectedOption: optionIndex,
       });
       setToast({ show: true, message: "Vote submitted!", type: "success" });
 
       // Fetch updated polls so UI is in sync
-      const res = await axios.get("http://localhost:5000/api/polls");
+      const res = await API.client.get("/polls");
       let pollsData = res.data.map((poll) => ({
         id: poll._id,
         question: poll.title,
@@ -62,7 +64,7 @@ const ParticipatePolls = () => {
         location: poll.targetLocation || "",
         closesOn: poll.closeDate,
       }));
-      const votedRes = await axios.get(`http://localhost:5000/api/polls/voted?userId=${userId}`);
+      const votedRes = await API.client.get(`/polls/voted?userId=${userId}`);
       const votedPollIds = votedRes.data;
       pollsData = pollsData.map((poll) => ({
         ...poll,

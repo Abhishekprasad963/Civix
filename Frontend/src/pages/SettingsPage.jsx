@@ -1,5 +1,6 @@
 
 import { useState, useEffect } from "react";
+import API from "../api";
 
 const SettingsPage = () => {
   const [activeSection, setActiveSection] = useState("profile");
@@ -19,41 +20,35 @@ const SettingsPage = () => {
 
   const [petitionEmails, setPetitionEmails] = useState(true);
 
-  // Auto clear successMessage after 3 seconds
+  // Auto-clear success message after 3 seconds
   useEffect(() => {
-    if (successMessage) {
-      const timer = setTimeout(() => {
-        setSuccessMessage("");
-      }, 3000);
-      return () => clearTimeout(timer);
-    }
+    if (!successMessage) return;
+
+    const timer = setTimeout(() => {
+      setSuccessMessage("");
+    }, 3000);
+
+    return () => clearTimeout(timer);
   }, [successMessage]);
 
   // Fetch user profile
   useEffect(() => {
     const fetchUserProfile = async () => {
       try {
-        const response = await fetch("http://localhost:5000/api/settings/me", {
-          method: "GET",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${localStorage.getItem("token")}`,
-          },
+        const response = await API.client.get("/settings/me");
+        const data = response.data;
+
+        setFormData({
+          fullName: data.fullName || "",
+          email: data.email || "",
         });
 
-        const data = await response.json();
-
-        if (response.ok) {
-          setFormData({
-            fullName: data.fullName,
-            email: data.email,
-          });
-          setProfilePic(data.profilePic || null);
-        } else {
-          console.error(data.error || "Failed to fetch user data");
-        }
+        setProfilePic(data.profilePic || null);
       } catch (err) {
-        console.error("❌ Error fetching profile:", err);
+        console.error("Error fetching profile:", err);
+        setErrorMessage(
+          err.response?.data?.error || "Failed to fetch user data"
+        );
       }
     };
 
@@ -68,77 +63,69 @@ const SettingsPage = () => {
     }));
   };
 
-  // Update profile (removed profilePic from update)
+  // Update profile
   const handleProfileUpdate = async () => {
     try {
-      const response = await fetch("http://localhost:5000/api/settings/update", {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
-        },
-        body: JSON.stringify({
-          fullName: formData.fullName,
-          // profilePic removed from update
-        }),
+      const response = await API.client.put("/settings/update", {
+        fullName: formData.fullName,
       });
 
-      const data = await response.json();
-
-      if (!response.ok) {
-        setErrorMessage(data.error || data.message || "Failed to update profile");
-        setSuccessMessage("");
-        return;
-      }
+      const data = response.data;
 
       setSuccessMessage(data.message || "Profile updated successfully");
       setErrorMessage("");
-
     } catch (err) {
-      console.error("❌ Error:", err);
-      alert("Something went wrong. Try again.");
+      console.error("Profile update error:", err);
+      setErrorMessage(
+        err.response?.data?.error ||
+          err.response?.data?.message ||
+          "Failed to update profile"
+      );
+      setSuccessMessage("");
     }
   };
 
   // Update password
   const handlePasswordUpdate = async (e) => {
     e.preventDefault();
+    setErrorMessage("");
+    setSuccessMessage("");
+    setPasswordMessage("");
+
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      setErrorMessage("Please fill in all password fields.");
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      setErrorMessage("New password and confirm password do not match.");
+      return;
+    }
+
+    if (newPassword.length < 6) {
+      setErrorMessage("Password must be at least 6 characters.");
+      return;
+    }
 
     try {
-      const token = localStorage.getItem("token");
+      await API.client.put("/settings/update-password", {
+        currentPassword,
+        newPassword,
+        confirmPassword,
+      });
 
-      const res = await fetch(
-        "http://localhost:5000/api/settings/update-password",
-        {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            currentPassword,
-            newPassword,
-            confirmPassword,
-          }),
-        }
-      );
-
-      const data = await res.json();
-
-      if (res.ok) {
-        setSuccessMessage("Password updated successfully!");
-        setErrorMessage("");
-        setCurrentPassword("");
-        setNewPassword("");
-        setConfirmPassword("");
-      } else {
-        setErrorMessage(data.error || "Failed to update password");
-        setSuccessMessage("");
-      }
-
+      setSuccessMessage("Password updated successfully!");
+      setErrorMessage("");
+      setPasswordMessage("");
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
     } catch (err) {
-      console.error("❌ Error updating password:", err);
-      alert("⚠️ Server error while updating password");
+      console.error("Error updating password:", err);
+      setErrorMessage(
+        err.response?.data?.error || "Failed to update password"
+      );
+      setSuccessMessage("");
     }
   };
 
@@ -158,14 +145,15 @@ const SettingsPage = () => {
     },
   ];
 
-  const defaultProfileIcon = "https://cdn-icons-png.flaticon.com/512/847/847969.png";
+  const defaultProfileIcon =
+    "https://cdn-icons-png.flaticon.com/512/847/847969.png";
 
   // Handle sidebar section change
   const handleSectionChange = (sectionId) => {
     setActiveSection(sectionId);
     setSuccessMessage("");
     setErrorMessage("");
-    setShowMobileMenu(false); // Close mobile menu on section change
+    setShowMobileMenu(false);
   };
 
   // Render content by section
@@ -180,25 +168,27 @@ const SettingsPage = () => {
               </h2>
             </div>
 
-            {/* Profile Section - Static Profile Icon */}
+            {/* Profile Section */}
             <div className="flex flex-col sm:flex-row sm:items-center gap-4 mb-6 sm:mb-8">
               <div className="relative w-16 h-16 sm:w-20 sm:h-20">
                 <img
                   src={profilePic || defaultProfileIcon}
                   alt="Profile"
                   className="w-16 h-16 sm:w-20 sm:h-20 rounded-full object-cover border-2 border-gray-200 bg-gray-100"
-                  // Removed onClick handler to disable popup
                 />
               </div>
+
               <div>
                 <h3 className="text-lg sm:text-xl font-semibold text-gray-800">
                   {formData.fullName}
                 </h3>
-                <p className="text-gray-500 text-sm sm:text-base">{formData.email}</p>
+                <p className="text-gray-500 text-sm sm:text-base">
+                  {formData.email}
+                </p>
               </div>
             </div>
 
-            {/* Personal Info Form */}
+            {/* Personal Information Form */}
             <div className="mb-6 sm:mb-8">
               <h3 className="text-lg font-semibold text-gray-800 mb-2">
                 Personal Information
@@ -215,7 +205,9 @@ const SettingsPage = () => {
                   <input
                     type="text"
                     value={formData.fullName}
-                    onChange={(e) => handleInputChange("fullName", e.target.value)}
+                    onChange={(e) =>
+                      handleInputChange("fullName", e.target.value)
+                    }
                     className="w-full px-3 sm:px-4 py-2 sm:py-3 bg-gray-100 border-0 rounded-lg text-gray-800 focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
                   />
                 </div>
@@ -256,6 +248,7 @@ const SettingsPage = () => {
             <h2 className="text-xl sm:text-2xl font-semibold text-gray-800 mb-4 sm:mb-6">
               Security & Privacy
             </h2>
+
             <form onSubmit={handlePasswordUpdate} className="space-y-4">
               <input
                 type="password"
@@ -263,21 +256,28 @@ const SettingsPage = () => {
                 value={currentPassword}
                 onChange={(e) => setCurrentPassword(e.target.value)}
                 className="w-full px-3 sm:px-4 py-2 sm:py-3 bg-white rounded-lg text-sm sm:text-base"
+                required
               />
+
               <input
                 type="password"
                 placeholder="New Password"
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
                 className="w-full px-3 sm:px-4 py-2 sm:py-3 bg-white rounded-lg text-sm sm:text-base"
+                minLength={6}
+                required
               />
+
               <input
                 type="password"
                 placeholder="Confirm Password"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 className="w-full px-3 sm:px-4 py-2 sm:py-3 bg-white rounded-lg text-sm sm:text-base"
+                required
               />
+
               <button
                 type="submit"
                 className="bg-violet-600 text-white px-4 sm:px-6 py-2 rounded-lg hover:bg-violet-700 text-sm sm:text-base w-full sm:w-auto"
@@ -310,7 +310,11 @@ const SettingsPage = () => {
               strokeWidth="2"
               viewBox="0 0 24 24"
             >
-              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M5 13l4 4L19 7"
+              />
             </svg>
             <span className="text-green-700 font-semibold text-sm sm:text-lg">
               {successMessage}
@@ -336,8 +340,18 @@ const SettingsPage = () => {
             onClick={() => setShowMobileMenu(!showMobileMenu)}
             className="p-2 text-gray-600 hover:text-gray-800"
           >
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+            <svg
+              className="w-6 h-6"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M4 6h16M4 12h16M4 18h16"
+              />
             </svg>
           </button>
         </div>
@@ -345,16 +359,36 @@ const SettingsPage = () => {
 
       {/* Mobile Menu Overlay */}
       {showMobileMenu && (
-        <div className="lg:hidden fixed inset-0 bg-black bg-opacity-50 z-40" onClick={() => setShowMobileMenu(false)}>
-          <div className="bg-white w-80 h-full p-6 transform transition-transform" onClick={(e) => e.stopPropagation()}>
+        <div
+          className="lg:hidden fixed inset-0 bg-black bg-opacity-50 z-40"
+          onClick={() => setShowMobileMenu(false)}
+        >
+          <div
+            className="bg-white w-80 h-full p-6 transform transition-transform"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-lg font-bold text-gray-800">Settings Menu</h2>
-              <button onClick={() => setShowMobileMenu(false)} className="text-gray-500 hover:text-gray-700">
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              <button
+                onClick={() => setShowMobileMenu(false)}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                <svg
+                  className="w-6 h-6"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M6 18L18 6M6 6l12 12"
+                  />
                 </svg>
               </button>
             </div>
+
             <div className="space-y-2">
               {sidebarItems.map((item) => (
                 <button
@@ -374,7 +408,9 @@ const SettingsPage = () => {
                       <h3 className="font-semibold text-gray-800 text-sm">
                         {item.title}
                       </h3>
-                      <p className="text-xs text-gray-500 mt-1">{item.subtitle}</p>
+                      <p className="text-xs text-gray-500 mt-1">
+                        {item.subtitle}
+                      </p>
                     </div>
                     <span className="text-gray-400">›</span>
                   </div>
@@ -388,6 +424,7 @@ const SettingsPage = () => {
       {/* Sidebar - Hidden on mobile, shown on desktop */}
       <div className="hidden lg:block w-80 bg-green-50 p-6 shadow-lg">
         <h1 className="text-2xl font-bold text-gray-800 mb-6">Settings</h1>
+
         <div className="space-y-2">
           {sidebarItems.map((item) => (
             <button
@@ -407,7 +444,9 @@ const SettingsPage = () => {
                   <h3 className="font-semibold text-gray-800 text-sm">
                     {item.title}
                   </h3>
-                  <p className="text-xs text-gray-500 mt-1">{item.subtitle}</p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    {item.subtitle}
+                  </p>
                 </div>
                 <span className="text-gray-400">›</span>
               </div>
@@ -417,9 +456,7 @@ const SettingsPage = () => {
       </div>
 
       {/* Main Content */}
-      <div className="flex-1 p-4 sm:p-6 lg:p-8">
-        {renderContent()}
-      </div>
+      <div className="flex-1 p-4 sm:p-6 lg:p-8">{renderContent()}</div>
 
       {/* CSS Animations */}
       <style>
@@ -440,4 +477,3 @@ const SettingsPage = () => {
 };
 
 export default SettingsPage;
-
