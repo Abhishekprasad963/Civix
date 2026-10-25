@@ -109,10 +109,13 @@
 //   );
 // };
 
-
-
-
-import React, { createContext, ReactNode, useContext, useEffect, useState } from "react";
+import React, {
+  createContext,
+  ReactNode,
+  useContext,
+  useEffect,
+  useState,
+} from "react";
 import { useNavigate } from "react-router-dom";
 // @ts-ignore
 import API from "../api";
@@ -122,11 +125,16 @@ interface User {
   fullName: string;
   email: string;
   role?: string;
+  isDemo?: boolean;
 }
 
 interface AuthContextType {
   user: User | null;
-  login: (email: string, password: string) => Promise<{ success: boolean; error?: string; user?: User }>;
+  setUser: (user: User) => void;
+  login: (
+    email: string,
+    password: string,
+  ) => Promise<{ success: boolean; error?: string; user?: User }>;
   logout: () => void;
   loading: boolean;
   isAuthenticated: boolean;
@@ -166,7 +174,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     setLoading(false);
   }, []);
 
-  const login = async (email: string, password: string) => {
+  /* const login = async (email: string, password: string) => {
     try {
       const { data } = await API.login({ email, password });
       const { token, user: userData } = data;
@@ -182,6 +190,54 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       return { success: false, error: error.response?.data?.error || "Login failed." };
     }
   };
+ */
+
+  const login = async (email: string, password: string) => {
+    try {
+      const { data } = await API.login({ email, password });
+
+      if (!data?.token || !data?.user) {
+        console.error("Unexpected login response:", data);
+
+        return {
+          success: false,
+          error: "Login response is missing the token or user information.",
+        };
+      }
+
+      const userData = data.user;
+      const userId = userData.id || userData._id;
+
+      localStorage.setItem("token", data.token);
+      localStorage.setItem("user", JSON.stringify(userData));
+
+      if (userId) {
+        localStorage.setItem("userId", userId);
+      }
+
+      if (userData.role) {
+        localStorage.setItem("userRole", userData.role);
+      }
+
+      setUser(userData);
+
+      return {
+        success: true,
+        user: userData,
+      };
+    } catch (error: any) {
+      console.error("Frontend login error:", error);
+      console.error("Backend response:", error.response?.data);
+
+      return {
+        success: false,
+        error:
+          error.response?.data?.error ||
+          error.message ||
+          "Login failed. Please try again.",
+      };
+    }
+  };
 
   const logout = () => {
     API.clearAuth();
@@ -191,6 +247,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const authContextValue = {
     user,
+    setUser,
     login,
     logout,
     loading,

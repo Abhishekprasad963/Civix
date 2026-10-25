@@ -1,7 +1,7 @@
 import bcrypt from "bcryptjs";
 import express from "express";
 import authMiddleware from "../middleware/authMiddleware.js";
-import User from "../models/User.js";
+import User, { isDemoAccount } from "../models/User.js";
 
 const router = express.Router();
 
@@ -16,7 +16,10 @@ router.get("/me", authMiddleware, async (req, res) => {
     if (!user) {
       return res.status(404).json({ error: "User not found" });
     }
-    res.json(user);
+    res.json({
+      ...user.toJSON(),
+      isDemo: isDemoAccount(user),
+    });
   } catch (err) {
     console.error("❌ Error fetching user:", err.message);
     res.status(500).json({ error: "Server error" });
@@ -113,6 +116,12 @@ router.put("/update", authMiddleware, async (req, res) => {
  */
 router.put("/update-password", authMiddleware, async (req, res) => {
   try {
+    if (req.user.isDemo) {
+      return res.status(403).json({
+        error: "Demo account passwords cannot be changed.",
+      });
+    }
+
     const { currentPassword, newPassword, confirmPassword } = req.body;
 
     // Validate input

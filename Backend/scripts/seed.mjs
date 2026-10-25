@@ -8,7 +8,8 @@ import Vote from "../models/Vote.js";
 
 dotenv.config();
 
-const demoPassword = "CivixDemo2026!";
+const demoCitizenPassword = "CivixDemo2026!";
+const demoOfficialPassword = "098765";
 
 const citizens = [
   "Aarav Sharma", "Aditi Verma", "Arjun Patel", "Ananya Reddy", "Dev Mehta",
@@ -254,8 +255,10 @@ async function seedUsers() {
       user.set(userData);
     }
 
-    user.password = demoPassword;
+    user.password =
+      userData.role === "official" ? demoOfficialPassword : demoCitizenPassword;
     user.isVerified = true;
+    user.isDemo = true;
     await user.save();
     usersByEmail.set(userData.email, user);
   }

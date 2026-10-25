@@ -25,6 +25,10 @@ const userSchema = new mongoose.Schema({
     enum: ["citizen", "official"], 
     default: "citizen" 
   },
+  isDemo: {
+    type: Boolean,
+    default: false,
+  },
   profilePic: { 
     type: String, 
     default: null 
@@ -85,4 +89,11 @@ userSchema.methods.comparePassword = async function(candidatePassword) {
 };
 
 const User = mongoose.model("User", userSchema);
+
+export const isDemoAccount = (user) =>
+  user?.isDemo === true ||
+  /^(?:admin[12]|citizen(?:0[1-9]|1\d|2[0-5]))@civix\.test$/i.test(
+    user?.email || ""
+  );
+
 export default User;

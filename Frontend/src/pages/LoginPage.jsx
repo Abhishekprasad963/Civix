@@ -70,6 +70,22 @@ export default function LoginPage() {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
+  const fillDemoOfficialCredentials = () => {
+    setFormData({
+      email: "admin1@civix.test",
+      password: "098765",
+    });
+    setError("");
+  };
+
+  const fillDemoCitizenCredentials = () => {
+    setFormData({
+      email: "citizen01@civix.test",
+      password: "CivixDemo2026!",
+    });
+    setError("");
+  };
+
   const handleForgotPasswordChange = (e) => {
     setForgotPasswordData({ ...forgotPasswordData, [e.target.name]: e.target.value });
   };
@@ -358,6 +374,32 @@ export default function LoginPage() {
             <button className="font-semibold text-gray-800 border-b-2 border-green-400">Login</button>
             <Link to="/signup" className="text-gray-500 hover:text-gray-700">Register</Link>
           </div>
+          <div className="mb-4 grid grid-cols-2 rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-gray-700">
+            <div className="min-w-0 pr-3">
+              <p className="font-semibold text-gray-800">Demo official account</p>
+              <p>Email: admin1@civix.test</p>
+              <p>Password: 098765</p>
+              <button
+                type="button"
+                onClick={fillDemoOfficialCredentials}
+                className="mt-1 text-left font-medium text-green-700 hover:text-green-800"
+              >
+                Fill official credentials
+              </button>
+            </div>
+            <div className="min-w-0 border-l border-green-200 pl-3">
+              <p className="font-semibold text-gray-800">Demo citizen account</p>
+              <p>Email: citizen01@civix.test</p>
+              <p>Password: CivixDemo2026!</p>
+              <button
+                type="button"
+                onClick={fillDemoCitizenCredentials}
+                className="mt-1 text-left font-medium text-green-700 hover:text-green-800"
+              >
+                Fill citizen credentials
+              </button>
+            </div>
+          </div>
           {error && <div className="mb-4 p-2 bg-red-100 text-red-700 rounded-lg text-sm">{error}</div>}
           <form className="space-y-4" onSubmit={handleSubmit}>
             <div>
@@ -365,7 +407,7 @@ export default function LoginPage() {
               <input 
                 type="email" 
                 name="email" 
-                placeholder="Enter your email" 
+                placeholder="Enter your email (e.g. admin1@civix.test)"
                 value={formData.email} 
                 onChange={handleChange} 
                 required 

@@ -1,8 +1,11 @@
 
 import { useState, useEffect } from "react";
 import API from "../api";
+import { useAuth } from "../components/AuthContext";
 
 const SettingsPage = () => {
+  const { user } = useAuth();
+  const [isDemo, setIsDemo] = useState(user?.isDemo === true);
   const [activeSection, setActiveSection] = useState("profile");
   const [profilePic, setProfilePic] = useState(null);
   const [currentPassword, setCurrentPassword] = useState("");
@@ -43,6 +46,7 @@ const SettingsPage = () => {
           email: data.email || "",
         });
 
+        setIsDemo(data.isDemo === true);
         setProfilePic(data.profilePic || null);
       } catch (err) {
         console.error("Error fetching profile:", err);
@@ -196,7 +200,6 @@ const SettingsPage = () => {
               <p className="text-gray-500 text-sm mb-4 sm:mb-6">
                 Update your basic information here.
               </p>
-
               <div className="space-y-4">
                 <div>
                   <label className="block text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">
@@ -248,6 +251,11 @@ const SettingsPage = () => {
             <h2 className="text-xl sm:text-2xl font-semibold text-gray-800 mb-4 sm:mb-6">
               Security & Privacy
             </h2>
+            {isDemo && (
+              <p className="mb-4 rounded-lg bg-amber-100 p-3 text-sm text-amber-800">
+                Password changes are disabled for demo accounts.
+              </p>
+            )}
 
             <form onSubmit={handlePasswordUpdate} className="space-y-4">
               <input
@@ -255,6 +263,7 @@ const SettingsPage = () => {
                 placeholder="Current Password"
                 value={currentPassword}
                 onChange={(e) => setCurrentPassword(e.target.value)}
+                disabled={isDemo}
                 className="w-full px-3 sm:px-4 py-2 sm:py-3 bg-white rounded-lg text-sm sm:text-base"
                 required
               />
@@ -264,6 +273,7 @@ const SettingsPage = () => {
                 placeholder="New Password"
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
+                disabled={isDemo}
                 className="w-full px-3 sm:px-4 py-2 sm:py-3 bg-white rounded-lg text-sm sm:text-base"
                 minLength={6}
                 required
@@ -274,12 +284,14 @@ const SettingsPage = () => {
                 placeholder="Confirm Password"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
+                disabled={isDemo}
                 className="w-full px-3 sm:px-4 py-2 sm:py-3 bg-white rounded-lg text-sm sm:text-base"
                 required
               />
 
               <button
                 type="submit"
+                disabled={isDemo}
                 className="bg-violet-600 text-white px-4 sm:px-6 py-2 rounded-lg hover:bg-violet-700 text-sm sm:text-base w-full sm:w-auto"
               >
                 Update Password

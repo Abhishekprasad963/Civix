@@ -423,9 +423,10 @@ router.get("/", async (req, res) => {
 });
 
 // ✅ Vote on Poll
-router.post("/:id/vote", async (req, res) => {
+router.post("/:id/vote", authMiddleware, async (req, res) => {
   try {
-    const { userId, selectedOption } = req.body;
+    const { selectedOption } = req.body;
+    const userId = req.user.id;
     const pollId = req.params.id;
 
     const poll = await Poll.findById(pollId);
@@ -461,7 +462,7 @@ router.get("/voted", async (req, res) => {
 });
 
 // ✅ Update Poll
-router.put("/:id", async (req, res) => {
+router.put("/:id", authMiddleware, async (req, res) => {
   try {
     const { title, description, options, targetLocation, closeDate, status } = req.body;
 
@@ -495,7 +496,7 @@ router.get("/my-polls", authMiddleware, async (req, res) => {
 });
 
 // ✅ Delete Poll
-router.delete("/:id", async (req, res) => {
+router.delete("/:id", authMiddleware, async (req, res) => {
   try {
     const poll = await Poll.findByIdAndDelete(req.params.id);
     if (!poll) return res.status(404).json({ error: "Poll not found" });

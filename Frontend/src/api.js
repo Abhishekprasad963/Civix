@@ -1,11 +1,14 @@
+
 import axios from "axios";
 
 class ApiClient {
   constructor() {
-    const apiBaseUrl = import.meta.env.VITE_API_URL || "http://localhost:5000";
+    const apiBaseUrl =
+      import.meta.env.VITE_API_URL || "http://localhost:5000";
+
     this.client = axios.create({
-      baseURL: `${apiBaseUrl.replace(/\/$/, "")}/api`,
-      timeout: 10000,
+      baseURL: `${apiBaseUrl.replace(/\/+$/, "")}/api`,
+      timeout: 15000,
       headers: {
         "Content-Type": "application/json",
       },
@@ -18,9 +21,11 @@ class ApiClient {
     this.client.interceptors.request.use(
       (config) => {
         const token = localStorage.getItem("token");
+
         if (token) {
           config.headers.Authorization = `Bearer ${token}`;
         }
+
         return config;
       },
       (error) => Promise.reject(error)
@@ -31,10 +36,12 @@ class ApiClient {
       (error) => {
         if (error.response?.status === 401) {
           this.clearAuth();
+
           if (window.location.pathname !== "/login") {
             window.location.href = "/login";
           }
         }
+
         return Promise.reject(error);
       }
     );
@@ -44,39 +51,61 @@ class ApiClient {
     localStorage.removeItem("token");
     localStorage.removeItem("user");
     localStorage.removeItem("userId");
-    delete this.client.defaults.headers.common["Authorization"];
+
+    delete this.client.defaults.headers.common.Authorization;
   }
 
   // ================= Auth methods =================
+
   async login(credentials) {
-    const response = await this.client.post("/auth/login", credentials);
-    if (response.data?.token) {
-      localStorage.setItem("token", response.data.token);
-      localStorage.setItem("user", JSON.stringify(response.data.user));
-      localStorage.setItem("userId", response.data.user.id);
+    const response = await this.client.post(
+      "/auth/login",
+      credentials
+    );
+
+    if (response.data?.token && response.data?.user) {
+      this.setAuthToken(response.data.token);
+      localStorage.setItem(
+        "user",
+        JSON.stringify(response.data.user)
+      );
+      localStorage.setItem(
+        "userId",
+        response.data.user.id || response.data.user._id
+      );
     }
+
     return response;
   }
 
+  // Signup now creates an account directly without OTP.
   async register(userData) {
-    const response = await this.client.post("/auth/signup", userData);
-    if (response.data?.token) {
+    const response = await this.client.post(
+      "/auth/signup",
+      userData
+    );
+
+    if (response.data?.token && response.data?.user) {
       this.setAuthToken(response.data.token);
-      localStorage.setItem("user", JSON.stringify(response.data.user));
-      localStorage.setItem("userId", response.data.user.id);
+
+      localStorage.setItem(
+        "user",
+        JSON.stringify(response.data.user)
+      );
+
+      localStorage.setItem(
+        "userId",
+        response.data.user.id || response.data.user._id
+      );
     }
+
     return response;
   }
 
-  // ================= OTP & Password Reset Methods =================
+  // Retained for compatibility with existing frontend code.
+  // Signup no longer requires OTP verification.
   async verifyOtp(otpData) {
-    const response = await this.client.post("/auth/verify-otp", otpData);
-    if (response.data?.token) {
-      this.setAuthToken(response.data.token);
-      localStorage.setItem("user", JSON.stringify(response.data.user));
-      localStorage.setItem("userId", response.data.user.id);
-    }
-    return response;
+    return this.client.post("/auth/verify-otp", otpData);
   }
 
   async forgotPassword(email) {
@@ -92,6 +121,7 @@ class ApiClient {
   }
 
   // ================= Petition methods =================
+
   async getPetitions(params = {}) {
     return this.client.get("/petitions", { params });
   }
@@ -101,7 +131,11 @@ class ApiClient {
   }
 
   async createPetition(petitionData) {
-    const res = await this.client.post("/petitions", petitionData);
+    const res = await this.client.post(
+      "/petitions",
+      petitionData
+    );
+
     return {
       success: true,
       message: res.data.message || "Petition created successfully",
@@ -114,39 +148,44 @@ class ApiClient {
   }
 
   async signPetition(id) {
-     return this.client.post(`/petitions/${id}/sign`);
+    return this.client.post(`/petitions/${id}/sign`);
   }
 
   async deletePetition(id) {
     return this.client.delete(`/petitions/${id}`);
   }
-  
+
   async respondToPetition(id, responseData) {
-    return this.client.post(`/petitions/${id}/respond`, responseData);
+    return this.client.post(
+      `/petitions/${id}/respond`,
+      responseData
+    );
   }
 
   // ================= Poll methods =================
+
   async getOfficialPolls() {
-    return this.client.get('/polls/my-polls');
+    return this.client.get("/polls/my-polls");
   }
 
   async getAllPolls() {
-    return this.client.get('/polls');
+    return this.client.get("/polls");
   }
 
   async createPoll(pollData) {
-    return this.client.post('/polls', pollData);
+    return this.client.post("/polls", pollData);
   }
 
   async updatePoll(id, pollData) {
-      return this.client.put(`/polls/${id}`, pollData);
+    return this.client.put(`/polls/${id}`, pollData);
   }
 
   async deletePoll(id) {
-      return this.client.delete(`/polls/${id}`);
+    return this.client.delete(`/polls/${id}`);
   }
 
   // ================= Officials methods =================
+
   async getOfficials() {
     return this.client.get("/officials");
   }
@@ -156,6 +195,7 @@ class ApiClient {
   }
 
   // ================= Dashboard methods =================
+
   async getDashboardSummary() {
     return this.client.get("/dashboard/summary");
   }
@@ -163,7 +203,7 @@ class ApiClient {
   async getDashboardEngagement() {
     return this.client.get("/dashboard/engagement");
   }
-  
+
   async getMyPetitions() {
     return this.client.get("/user/my-petitions");
   }
@@ -177,9 +217,11 @@ class ApiClient {
   }
 
   // ================= Auth Helpers =================
+
   setAuthToken(token) {
     localStorage.setItem("token", token);
-    this.client.defaults.headers.common["Authorization"] = `Bearer ${token}`;
+    this.client.defaults.headers.common.Authorization =
+      `Bearer ${token}`;
   }
 
   removeAuthToken() {
@@ -192,10 +234,15 @@ class ApiClient {
 
   getStoredUser() {
     const userData = localStorage.getItem("user");
+
     try {
       return userData ? JSON.parse(userData) : null;
     } catch (error) {
-      console.error("Could not parse user data from localStorage", error);
+      console.error(
+        "Could not parse user data from localStorage",
+        error
+      );
+
       return null;
     }
   }

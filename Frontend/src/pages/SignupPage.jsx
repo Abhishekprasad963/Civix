@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import API from "../api";
+import { useAuth } from "../components/AuthContext";
 
 // 👁️ Icons
 const EyeIcon = () => (
@@ -34,6 +35,7 @@ const SignupPage = () => {
   const [otpLoading, setOtpLoading] = useState(false);
 
   const navigate = useNavigate();
+  const { setUser } = useAuth();
 
   // CSS to hide browser-native password reveal icons so only our custom icons show
   const hideNativePasswordToggleStyles = `
@@ -58,7 +60,7 @@ const SignupPage = () => {
     }
   `;
 
-  // Step 1 → Request OTP (register)
+  // Create the account directly without OTP.
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
@@ -81,9 +83,6 @@ const SignupPage = () => {
     }
 
     try {
-  console.log("📝 Starting registration for:", email);
-  console.log("🔎 Selected role:", role);
-      // Send registration details so server can create user and generate/send OTP
       const response = await API.register({
         fullName: fullName.trim(),
         email: email.toLowerCase().trim(),
@@ -91,17 +90,24 @@ const SignupPage = () => {
         role: role.toLowerCase(),
       });
 
-      console.log("📧 Registration response:", response.data);
+      const user = response.data?.user;
+      if (!response.data?.token || !user) {
+        throw new Error("Signup response is missing authentication information.");
+      }
 
-      if (response.data.message === "OTP sent to email") {
-        setShowOtpModal(true);
-        setError("");
+      setUser(user);
+      if (user.role === "official") {
+        navigate("/official-dashboard");
       } else {
-        setError("Unexpected response from server");
+        navigate("/dashboard");
       }
     } catch (err) {
-      console.error("❌ Registration error:", err);
-      setError(err.response?.data?.error || "Failed to send OTP. Please try again.");
+      console.error("Signup error:", err);
+      setError(
+        err.response?.data?.error ||
+          err.message ||
+          "Failed to create account. Please try again."
+      );
     } finally {
       setLoading(false);
     }
