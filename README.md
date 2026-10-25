@@ -84,6 +84,8 @@ The system is built using **Node.js**, **Express**, **React**, and **MongoDB** t
 
    The seed adds 25 citizen accounts, two official/admin accounts, 13 petitions with varied signature counts, five official polls, and six citizen-created polls with varied vote counts. It does not clear existing data and can be run again to update the demo records. Citizen accounts use the password `CivixDemo2026!`; official/admin accounts use `098765`. Citizen emails are `citizen01@civix.test` through `citizen25@civix.test`, and the official/admin emails are `admin1@civix.test` and `admin2@civix.test`.
 
+   To add 10 additional demo petitions and 10 polls without resetting existing demo votes or signatures, run `npm run seed:extra-content` from the `Backend` folder after the demo users have been seeded.
+
 6. **Start the frontend**
 
    ```bash

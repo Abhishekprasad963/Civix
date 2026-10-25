@@ -5,7 +5,8 @@
   "scripts": {
     "start": "node Server.js",
     "dev": "nodemon Server.js",
-    "seed": "node scripts/seed.mjs"
+    "seed": "node scripts/seed.mjs",
+    "seed:extra-content": "node scripts/seedExtraContent.mjs"
   },
   "keywords": [],
   "author": "",
